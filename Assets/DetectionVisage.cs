@@ -13,6 +13,7 @@ public class DetectionVisage : MonoBehaviour
 
     private VideoCapture _vc;
     private Mat _frame;
+    private Vector2Int _frameSize;
     private Texture2D _texture;
 
     public RawImage WebcamScreen;
@@ -26,17 +27,20 @@ public class DetectionVisage : MonoBehaviour
         */
 
         _vc = new VideoCapture();
+        _vc.FlipVertical = true;
         _vc.ImageGrabbed += HandleWebcamQueryFrame;
-        _vc.Start();
+
+        _frameSize = new Vector2Int((int)_vc.GetCaptureProperty(CapProp.FrameWidth), (int)_vc.GetCaptureProperty(CapProp.FrameHeight));
 
         _frame = new Mat();
 
-        _texture = new Texture2D(_vc.Width, _vc.Height, TextureFormat.RGBA32, false);
+        _texture = new Texture2D(_frameSize.x, _frameSize.y, TextureFormat.BGRA32, false);
         _texture.Apply();
 
         WebcamScreen.texture = _texture;
-        //WebcamScreen.material.mainTexture = _texture;
         WebcamScreen.SetNativeSize();
+
+        _vc.Start();
     }
 
     private void Update()
@@ -83,11 +87,12 @@ public class DetectionVisage : MonoBehaviour
          * l’appliquer à notre GameObject.
         */
 
-        CvInvoke.Resize(_frame, _frame, new System.Drawing.Size(_vc.Width, _vc.Height));
-        CvInvoke.CvtColor(_frame, _frame, ColorConversion.Bgr2Rgba);
-        CvInvoke.Flip(_frame, _frame, FlipType.Vertical);
+        CvInvoke.Resize(_frame, _frame, new System.Drawing.Size(_frameSize.x, _frameSize.y));
+        CvInvoke.CvtColor(_frame, _frame, ColorConversion.Bgr2Bgra);
 
-        _texture.LoadRawTextureData(_frame.ToImage<Rgba, byte>().Bytes);
+        //CvInvoke.Imshow("win", _frame); //DEBUG
+
+        _texture.LoadRawTextureData(_frame.ToImage<Bgra, byte>().Bytes);
 
         _texture.Apply();
     }
