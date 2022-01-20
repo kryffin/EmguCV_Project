@@ -12,8 +12,8 @@ public class DetectionVisage : MonoBehaviour
 {
 
     private VideoCapture _vc;
-    private Image<Bgr, byte> _frame;
-    private Thread _thread;
+    private Mat _frame;
+    private Texture2D _texture;
 
     public RawImage WebcamScreen;
 
@@ -26,12 +26,17 @@ public class DetectionVisage : MonoBehaviour
         */
 
         _vc = new VideoCapture();
-        _thread = new Thread(() => _vc.ImageGrabbed += HandleWebcamQueryFrame);
+        _vc.ImageGrabbed += HandleWebcamQueryFrame;
         _vc.Start();
 
-        _frame = new Image<Bgr, byte>(_vc.Width, _vc.Height);
+        _frame = new Mat();
 
-        _thread.Start();
+        _texture = new Texture2D(_vc.Width, _vc.Height, TextureFormat.RGBA32, false);
+        _texture.Apply();
+
+        WebcamScreen.texture = _texture;
+        //WebcamScreen.material.mainTexture = _texture;
+        WebcamScreen.SetNativeSize();
     }
 
     private void Update()
@@ -44,7 +49,12 @@ public class DetectionVisage : MonoBehaviour
 
         if (_vc.IsOpened)
         {
-            _vc.Grab(); //Call HandleWebcamQueryFrame() event
+            //Call HandleWebcamQueryFrame() event
+            if (!_vc.Grab())
+            {
+                Debug.LogError("VideoCapture frame could not be grabbed !");
+                UnityEditor.EditorApplication.isPlaying = false;
+            }
 
             //Logique du jeu
             //Affichage + <-- WebcamFrame (ressource commune)
@@ -62,7 +72,6 @@ public class DetectionVisage : MonoBehaviour
         _vc.Retrieve(_frame);
 
         //Traitement sur l'image
-        Debug.Log(_frame.Width + " " + _frame.Height);
 
         // --> WebcamFrame (ressource commune)
     }
@@ -74,13 +83,13 @@ public class DetectionVisage : MonoBehaviour
          * l’appliquer à notre GameObject.
         */
 
-        Texture2D texture = new Texture2D(_frame.Width, _frame.Height);
+        CvInvoke.Resize(_frame, _frame, new System.Drawing.Size(_vc.Width, _vc.Height));
+        CvInvoke.CvtColor(_frame, _frame, ColorConversion.Bgr2Rgba);
+        CvInvoke.Flip(_frame, _frame, FlipType.Vertical);
 
-        for (int x = 0; x < _frame.Width; x++)
-            for (int y = 0; y < _frame.Height; y++)
-                texture.SetPixel(x, y, new Color(_frame.Data[y, x, 2], _frame.Data[y, x, 1], _frame.Data[y, x, 0]));
+        _texture.LoadRawTextureData(_frame.ToImage<Rgba, byte>().Bytes);
 
-        WebcamScreen.texture = texture;
+        _texture.Apply();
     }
 
     private void OnDestroy()
@@ -89,7 +98,10 @@ public class DetectionVisage : MonoBehaviour
          * Fermeture du flux de la caméra.
         */
 
-        _vc.Stop();
-        _vc.Dispose();
+        if (_vc != null)
+        {
+            _vc.Stop();
+            _vc.Dispose();
+        }
     }
 }
