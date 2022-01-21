@@ -7,16 +7,24 @@ using Emgu.CV.CvEnum;
 using Emgu.CV.Util;
 using Emgu.CV.Structure;
 using System.Threading;
+using System.Drawing;
+using System.Collections.Generic;
 
 public class DetectionVisage : MonoBehaviour
 {
 
     private VideoCapture _vc;
     private Mat _frame;
-    private Vector2Int _frameSize;
     private Texture2D _texture;
+    private Thread _t;
 
+    public Transform Player;
     public RawImage WebcamScreen;
+    public Vector2Int FrameSize;
+    public float MinRectSize = 250;
+    public double CannyThreshold = 120;
+    public double CannyThresholdLinking = 120;
+    public bool FilterOnlyRedBoxes = true;
 
     private void Start()
     {
@@ -26,19 +34,19 @@ public class DetectionVisage : MonoBehaviour
          *  et enfin à récupérer le GameObjet sur lequel on va afficher notre webcam dans le jeu.
         */
 
-        _vc = new VideoCapture();
-        _vc.FlipVertical = true;
-        _vc.ImageGrabbed += HandleWebcamQueryFrame;
+        _vc = new VideoCapture(0, VideoCapture.API.DShow);
+        _vc.SetCaptureProperty(CapProp.Fps, 30);
+        _vc.SetCaptureProperty(CapProp.FrameWidth, FrameSize.x);
+        _vc.SetCaptureProperty(CapProp.FrameHeight, FrameSize.y);
 
-        _frameSize = new Vector2Int((int)_vc.GetCaptureProperty(CapProp.FrameWidth), (int)_vc.GetCaptureProperty(CapProp.FrameHeight));
+        _vc.ImageGrabbed += HandleWebcamQueryFrame;
 
         _frame = new Mat();
 
-        _texture = new Texture2D(_frameSize.x, _frameSize.y, TextureFormat.BGRA32, false);
-        _texture.Apply();
+        /*_texture = new Texture2D(FrameSize.x, FrameSize.y, TextureFormat.BGRA32, false);
+        _texture.Apply();*/
 
-        WebcamScreen.texture = _texture;
-        WebcamScreen.SetNativeSize();
+        WebcamScreen.color = new UnityEngine.Color(1, 1, 1, .5f);
 
         _vc.Start();
     }
@@ -57,13 +65,14 @@ public class DetectionVisage : MonoBehaviour
             if (!_vc.Grab())
             {
                 Debug.LogError("VideoCapture frame could not be grabbed !");
-                UnityEditor.EditorApplication.isPlaying = false;
+                //UnityEditor.EditorApplication.isPlaying = false;
             }
 
             //Logique du jeu
             //Affichage + <-- WebcamFrame (ressource commune)
-            DisplayFrameOnPlane();
         }
+
+        DisplayFrameOnPlane();
     }
 
     private void HandleWebcamQueryFrame(object sender, EventArgs e)
@@ -73,7 +82,8 @@ public class DetectionVisage : MonoBehaviour
          * que se fera la récupération de la frame courante ainsi que la détection de visage
         */
 
-        _vc.Retrieve(_frame);
+        if (_vc.IsOpened)
+            _vc.Retrieve(_frame);
 
         //Traitement sur l'image
 
@@ -87,14 +97,72 @@ public class DetectionVisage : MonoBehaviour
          * l’appliquer à notre GameObject.
         */
 
-        CvInvoke.Resize(_frame, _frame, new System.Drawing.Size(_frameSize.x, _frameSize.y));
-        CvInvoke.CvtColor(_frame, _frame, ColorConversion.Bgr2Bgra);
+        if (_frame.IsEmpty) return;
 
-        //CvInvoke.Imshow("win", _frame); //DEBUG
+        Image<Gray, byte> grayFrame = _frame.ToImage<Gray, byte>();
 
-        _texture.LoadRawTextureData(_frame.ToImage<Bgra, byte>().Bytes);
+        // Converts grayFrame to only contain the red objects
+        if (FilterOnlyRedBoxes)
+        {
+            Image<Hsv, byte> hsv = new Image<Hsv, byte>(FrameSize.x, FrameSize.y);
+            CvInvoke.CvtColor(_frame, hsv, ColorConversion.Bgr2Hsv);
+            Image<Gray, byte> lowerRed = hsv.InRange(new Hsv(0, 100, 100), new Hsv(10, 255, 255));
+            Image<Gray, byte> upperRed = hsv.InRange(new Hsv(160, 100, 100), new Hsv(179, 255, 255));
+            grayFrame = lowerRed + upperRed;
+            CvInvoke.Imshow("Grayscale", grayFrame);
+        }
 
-        _texture.Apply();
+        UMat cannyEdges = new UMat();
+        VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint();
+        CvInvoke.Canny(grayFrame, cannyEdges, CannyThreshold, CannyThresholdLinking);
+        CvInvoke.FindContours(cannyEdges, contours, null, RetrType.List, ChainApproxMethod.ChainApproxSimple);
+
+        List<RotatedRect> boxList = new List<RotatedRect>(); //stores each box found on screen
+
+        for (int i = 0; i < contours.Size; i++)
+        {
+            VectorOfPoint approxContour = new VectorOfPoint();
+            CvInvoke.ApproxPolyDP(contours[i], approxContour, CvInvoke.ArcLength(contours[i], true) * 0.05f, true);
+            
+            // Only considers contours with area greater than MinRectSize
+            if (CvInvoke.ContourArea(approxContour, false) > MinRectSize)
+            {
+                // Rectangle/Square shape has 4 contours
+                if (approxContour.Size == 4)
+                {
+                    bool isRectangle = true;
+                    Point[] pts = approxContour.ToArray();
+                    LineSegment2D[] edges = PointCollection.PolyLine(pts, true);
+
+                    // Keeps only corners between 80 and 100 degrees
+                    for (int j = 0; j < edges.Length; j++)
+                    {
+                        double angle = Math.Abs(edges[(j + 1) % edges.Length].GetExteriorAngleDegree(edges[j]));
+                        if (angle < 80f || angle > 100f)
+                        {
+                            isRectangle = false;
+                            break;
+                        }
+                    }
+
+                    if (isRectangle)
+                        boxList.Add(CvInvoke.MinAreaRect(approxContour));
+                }
+            }
+        }
+
+        // Draws blue bowes around the recognized squares
+        foreach (RotatedRect box in boxList)
+        {
+            CvInvoke.Polylines(_frame, Array.ConvertAll(box.GetVertices(), Point.Round), true, new Bgr(System.Drawing.Color.Blue).MCvScalar, 2);
+            Player.position = new Vector3(
+                Player.position.x,
+                -(box.Center.Y - (FrameSize.y / 2f)) / 50f,
+                0f
+                );
+        }
+
+        WebcamScreen.texture = _frame.ToTexture2D();
     }
 
     private void OnDestroy()
@@ -105,6 +173,7 @@ public class DetectionVisage : MonoBehaviour
 
         if (_vc != null)
         {
+            Thread.Sleep(60);
             _vc.Stop();
             _vc.Dispose();
         }
