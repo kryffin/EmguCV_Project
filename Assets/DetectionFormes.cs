@@ -7,59 +7,72 @@ using Emgu.CV.Util;
 using Emgu.CV.Structure;
 using System.Threading;
 using System.Drawing;
-using System.Collections.Generic;
+using UnityEngine.Serialization;
 
 public class DetectionFormes : MonoBehaviour
 {
     private VideoCapture _vc; //webcam
     private Mat _frame; //frame on which the webcam will write
-    private bool _areDebugWindowsOpened = false; //used to close the debug windows at runtime
-    private bool _isWebcamWindowOpened = false; //used to close the webcam window at runtime
+    private Texture2D _imageTexture; // rawImage texture, used to avoid memory leaks
+    private bool _areDebugWindowsOpened; //used to close the debug windows at runtime
+    private bool _isWebcamWindowOpened; //used to close the webcam window at runtime
 
     [Header("Gameplay Loop")]
 
-    public Transform Player1;
-    public Transform Player2;
+    public Transform player1;
+    public Transform player2;
 
     [Header("Webcam Settings")]
 
-    public RawImage WebcamScreen;
+    public RawImage webcamScreen;
     [Tooltip("Recommended : 1280 x 720")]
-    public Vector2Int FrameSize;
+    public Vector2Int frameSize;
 
     [Header("Shape Detection Settings")]
 
     [Tooltip("Recommended : 50")]
-    public double CannyThreshold = 50;
+    public double cannyThreshold = 50;
     [Tooltip("Recommended : 150")]
-    public double CannyThresholdLinking = 150;
-    [Tooltip("Recommended : 250")]
-    public float MinRectSize = 250;
+    public double cannyThresholdLinking = 150;
+    [FormerlySerializedAs("MinRectSize")] [Tooltip("Recommended : 250")]
+    public float minRectSize = 250;
+    public int morphIterations = 10;
+    
+
+    [Header("Color Detection Settings")]
+    public Vector3 blueLower = new Vector3(90, 50, 70);
+    public Vector3 blueUpper = new Vector3(128, 255, 255);
+    public Vector3 greenLower = new Vector3(36, 50, 70);
+    public Vector3 greenUpper = new Vector3(89, 255, 255);
+    //public Vector3 red1Lower = new Vector3(159, 50, 70);
+    //public Vector3 red1Upper = new Vector3(180, 255, 255);
+    //public Vector3 red2Lower = new Vector3(0, 50, 70);
+    //public Vector3 red2Upper = new Vector3(9, 255, 255);
 
     [Header("DEBUG")]
 
     [Tooltip("Displays the webcam in a different window")]
-    public bool WebcamInDifferentWindow;
-    [Tooltip("Opens 2 additionnal windows displaying the red and blue captured by the webcam")]
-    public bool DebugWindows;
+    public bool webcamInDifferentWindow;
+    [Tooltip("Opens 2 additional windows displaying the red and blue captured by the webcam")]
+    public bool debugWindows;
 
     private void Start()
     {
         // Setting up the webcam
         _vc = new VideoCapture(0, VideoCapture.API.DShow);
         _vc.SetCaptureProperty(CapProp.Fps, 30);
-        _vc.SetCaptureProperty(CapProp.FrameWidth, FrameSize.x);
-        _vc.SetCaptureProperty(CapProp.FrameHeight, FrameSize.y);
+        _vc.SetCaptureProperty(CapProp.FrameWidth, frameSize.x);
+        _vc.SetCaptureProperty(CapProp.FrameHeight, frameSize.y);
 
         _vc.ImageGrabbed += HandleWebcamQueryFrame;
 
         _frame = new Mat();
 
+        _imageTexture = new Texture2D(frameSize.x, frameSize.y);
+        webcamScreen.texture = _imageTexture;
+
         // Enables or not the webcam's Raw Image by turning it's alpha to 0
-        if (WebcamInDifferentWindow)
-            WebcamScreen.color = new UnityEngine.Color(1, 1, 1, .0f);
-        else
-            WebcamScreen.color = new UnityEngine.Color(1, 1, 1, .5f);
+        webcamScreen.color = webcamInDifferentWindow ? new UnityEngine.Color(1, 1, 1, .0f) : new UnityEngine.Color(1, 1, 1, .5f);
 
         _vc.Start();
     }
@@ -84,57 +97,38 @@ public class DetectionFormes : MonoBehaviour
         _vc.Retrieve(_frame);
     }
 
+    private void applyMorph(Image<Gray, byte> image)
+    {
+        Mat kernel = CvInvoke.GetStructuringElement(ElementShape.Rectangle, new Size(3, 3), new Point(1, 1));
+        CvInvoke.MorphologyEx(image, image, MorphOp.Close, kernel, new Point(-1, -1), morphIterations, BorderType.Default, new MCvScalar());
+        CvInvoke.MorphologyEx(image, image, MorphOp.Open, kernel, new Point(-1, -1), morphIterations, BorderType.Default, new MCvScalar());
+    }
+
     // Processes a grayscale image and draws the recognized rectangles onto the frame
     private void ProcessChannel(Image<Gray, byte> channel, bool firstPlayer = true)
     {
         UMat cannyEdges = new UMat();
         VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint();
-        CvInvoke.Canny(channel, cannyEdges, CannyThreshold, CannyThresholdLinking);
+        CvInvoke.Canny(channel, cannyEdges, cannyThreshold, cannyThresholdLinking);
         CvInvoke.FindContours(cannyEdges, contours, null, RetrType.List, ChainApproxMethod.ChainApproxSimple);
-
-        List<RotatedRect> boxList = new List<RotatedRect>(); //stores each box found on screen
-
+        
+        //Debug.Log(CvInvoke.ContourArea(contours[0], false));
         for (int i = 0; i < contours.Size; i++)
         {
-            VectorOfPoint approxContour = new VectorOfPoint();
-            CvInvoke.ApproxPolyDP(contours[i], approxContour, CvInvoke.ArcLength(contours[i], true) * 0.05f, true);
-
-            // Only considers contours with area greater than MinRectSize
-            if (CvInvoke.ContourArea(approxContour, false) > MinRectSize)
+            double area = CvInvoke.ContourArea(contours[i]);
+            if (area > minRectSize)
             {
-                // Rectangle/Square shape has 4 contours
-                if (approxContour.Size == 4)
-                {
-                    bool isRectangle = true;
-                    Point[] pts = approxContour.ToArray();
-                    LineSegment2D[] edges = PointCollection.PolyLine(pts, true);
+                Moments moments = CvInvoke.Moments(contours[i]);
+                int cX = (int) (moments.M10 / moments.M00);
+                int cY = (int) (moments.M01 / moments.M00);
+                CvInvoke.DrawContours(_frame, contours, i, new MCvScalar(255, 0, 0), 2);
+                CvInvoke.Circle(_frame, new Point(cX, cY), 7, new MCvScalar(255, 255, 255), -1);
 
-                    // Keeps only corners between 80 and 100 degrees
-                    for (int j = 0; j < edges.Length; j++)
-                    {
-                        double angle = Math.Abs(edges[(j + 1) % edges.Length].GetExteriorAngleDegree(edges[j]));
-                        if (angle < 80f || angle > 100f)
-                        {
-                            isRectangle = false;
-                            break;
-                        }
-                    }
-
-                    if (isRectangle)
-                        boxList.Add(CvInvoke.MinAreaRect(approxContour));
-                }
+                if (firstPlayer)
+                    player1.position = new Vector3(player1.position.x, -(cY - (frameSize.y / 2f)) / 50f, 0f);
+                else
+                    player2.position = new Vector3(player2.position.x, -(cY - (frameSize.y / 2f)) / 50f, 0f);
             }
-        }
-
-        // Draws squares around the recognized boxes
-        foreach (RotatedRect box in boxList)
-        {
-            CvInvoke.Polylines(_frame, Array.ConvertAll(box.GetVertices(), Point.Round), true, new Bgr(System.Drawing.Color.Green).MCvScalar, 2);
-
-            if (firstPlayer)
-                Player1.position = new Vector3(Player1.position.x, -(box.Center.Y - (FrameSize.y / 2f)) / 50f, 0f);
-            else
-                Player2.position = new Vector3(Player2.position.x, -(box.Center.Y - (FrameSize.y / 2f)) / 50f, 0f);
         }
     }
 
@@ -146,56 +140,59 @@ public class DetectionFormes : MonoBehaviour
             Debug.LogWarning("DisplayFrameOnPlane() : Tried to display an empty frame !");
             return;
         }
-
         // Converts the image to an HSV for a better color filtering
-        Image<Hsv, byte> hsv = new Image<Hsv, byte>(FrameSize.x, FrameSize.y);
+        Image<Hsv, byte> hsv = new Image<Hsv, byte>(frameSize.x, frameSize.y);
         CvInvoke.CvtColor(_frame, hsv, ColorConversion.Bgr2Hsv);
 
         // Filters out every color but the red
-        Image<Gray, byte> redFrame = hsv.InRange(new Hsv(0, 100, 100), new Hsv(10, 255, 255)) + hsv.InRange(new Hsv(160, 100, 100), new Hsv(179, 255, 255));
-
-        // Filters out every color but the blue
-        Image<Gray, byte> blueFrame = hsv.InRange(new Hsv(105, 100, 100), new Hsv(135, 255, 255));
+        Image<Gray, byte> greenFrame = hsv.InRange(new Hsv(greenLower.x, greenLower.y, greenLower.z), new Hsv(greenUpper.x, greenUpper.y, greenUpper.z));
+        //greenFrame += hsv.InRange(new Hsv(red2Lower.x, red2Lower.y, red2Lower.z), new Hsv(red2Upper.x, red2Upper.y, red2Upper.z));
         
-        // Displays the red and blue captured colors in seperate windows
-        if (DebugWindows)
+        // Filters out every color but the blue
+        Image<Gray, byte> blueFrame = hsv.InRange(new Hsv(blueLower.x, blueLower.y, blueLower.z), new Hsv(blueUpper.x, blueUpper.y, blueUpper.z));
+        
+        applyMorph(greenFrame);
+        applyMorph(blueFrame);
+        
+        // Displays the red and blue captured colors in separate windows
+        if (debugWindows)
         {
-            CvInvoke.Imshow("Red", redFrame);
+            CvInvoke.Imshow("Red", greenFrame);
             CvInvoke.Imshow("Blue", blueFrame);
 
             _areDebugWindowsOpened = true;
         }
 
-        ProcessChannel(redFrame);
+        ProcessChannel(greenFrame);
         ProcessChannel(blueFrame, false);
-
-        // Displays the webcam frame in a seperate window
-        if (WebcamInDifferentWindow)
+        // Displays the webcam frame in a separate window
+        if (webcamInDifferentWindow)
         {
             CvInvoke.Imshow("Webcam", _frame);
             _isWebcamWindowOpened = true;
         }
         
-        WebcamScreen.texture = _frame.ToTexture2D();
+        Destroy(_imageTexture);
+        webcamScreen.texture = _imageTexture = _frame.ToTexture2D();
     }
 
     private void OnValidate()
     {
         // Turns transparent the webcam ingame screen when displaying the webcam to a different window
-        if (UnityEditor.EditorApplication.isPlaying && !_isWebcamWindowOpened && WebcamInDifferentWindow)
-            WebcamScreen.color = new UnityEngine.Color(1, 1, 1, .0f);
+        if (UnityEditor.EditorApplication.isPlaying && !_isWebcamWindowOpened && webcamInDifferentWindow)
+            webcamScreen.color = new UnityEngine.Color(1, 1, 1, .0f);
 
         // Destroys the webcam window when it's open and the WebcamInDifferentWindow bool is unchecked
-        if (UnityEditor.EditorApplication.isPlaying && _isWebcamWindowOpened && !WebcamInDifferentWindow)
+        if (UnityEditor.EditorApplication.isPlaying && _isWebcamWindowOpened && !webcamInDifferentWindow)
         {
-            WebcamScreen.color = new UnityEngine.Color(1, 1, 1, .5f);
+            webcamScreen.color = new UnityEngine.Color(1, 1, 1, .5f);
             CvInvoke.DestroyWindow("Webcam");
 
             _isWebcamWindowOpened = false;
         }
 
         // Destroys red & blue windows when they are open and the DebugWindows bool is unchecked
-        if (UnityEditor.EditorApplication.isPlaying && _areDebugWindowsOpened && !DebugWindows)
+        if (UnityEditor.EditorApplication.isPlaying && _areDebugWindowsOpened && !debugWindows)
         {
             CvInvoke.DestroyWindow("Red");
             CvInvoke.DestroyWindow("Blue");
