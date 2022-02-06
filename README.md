@@ -18,7 +18,7 @@ Le joueur 1 est représenté par la plaque verte et le 2 par la plaque bleue.
 
 ## ARed Controls
 
-Le contrôle des deux plaques se fait grâce � des carrés de couleurs, un vert et un bleu, déplacés devant une webcam :
+Le contrôle des deux plaques se fait grâce à des carrés de couleurs, un vert et un bleu, déplacés devant une webcam :
 
 ![Détection carrés](ReadmeResources/ARPong_Detection.gif)
 
