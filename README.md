@@ -44,7 +44,7 @@ Après avoir différencié les couleurs, on détecte leurs contours puis on en r
 | ------------- | ------------ |
 | <img src="ReadmeResources/green_before.png"/> | <img src="ReadmeResources/blue_before.png"/> |
 
-*Images 4 & 5 : Isolation des couleurs après fermeture*
+*Images 4 & 5 : Isolation des couleurs avec transformation*
 | <p align="center">Green channel</p> | <p align="center">Blue channel</p> |
 | ------------- | ------------ |
 | <img src="ReadmeResources/green.png"/> | <img src="ReadmeResources/blue.png"/> |
