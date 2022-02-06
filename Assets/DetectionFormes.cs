@@ -157,7 +157,7 @@ public class DetectionFormes : MonoBehaviour
         // Displays the red and blue captured colors in separate windows
         if (debugWindows)
         {
-            CvInvoke.Imshow("Red", greenFrame);
+            CvInvoke.Imshow("Green", greenFrame);
             CvInvoke.Imshow("Blue", blueFrame);
 
             _areDebugWindowsOpened = true;

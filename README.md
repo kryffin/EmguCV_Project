@@ -1,8 +1,8 @@
 # AR Pong
 
-Développeurs : Nathan Coustance & Nicolas Kleinhentz
+DÃ©veloppeurs : Nathan Coustance & Nicolas Kleinhentz
 
-Projet universitaire dans le but d'apprendre à se servir d'EmguCV, un wrapper .NET de la librairie OpenCV, le tout incorporé dans un jeu Unity.
+Projet universitaire dans le but d'apprendre Ã  se servir d'EmguCV, un wrapper .NET de la librairie OpenCV, le tout incorporÃ© dans un jeu Unity.
 
 *Read this in other languages : [French](README.md), [English](README.en.md).*
 
@@ -12,42 +12,42 @@ La gameplay loop correspond au jeu Pong :
 
 ![Gameplay Loop](ReadmeResources/ARPong_GameplayLoop.gif)
 
-La balle apparaît au milieu du terrain avec un direction aléatoire suivant un angle de 90° en direction du joueur ayant subit le dernier but.  
-Lorsqu'elle rentre dans un but, la balle réapparait au milieu du terrain.  
-Le joueur 1 est représenté par la plaque rouge et le 2 par la plaque 2.
+La balle apparaÃ®t au milieu du terrain avec un direction alÃ©atoire suivant un angle de 90Â° en direction du joueur ayant subit le dernier but.  
+Lorsqu'elle rentre dans un but, la balle rÃ©apparait au milieu du terrain.  
+Le joueur 1 est reprÃ©sentÃ© par la plaque verte et le 2 par la plaque bleue.
 
 ## ARed Controls
 
-Le contrôle des deux plaques se fait grâce à des carrés de couleurs, un rouge et un bleu, déplacés devant une webcam :
+Le contrÃ´le des deux plaques se fait grÃ¢ce ï¿½ des carrÃ©s de couleurs, un vert et un bleu, dÃ©placÃ©s devant une webcam :
 
-*[Placeholder : gif démontrant le déplacement des plaques grâce à la webcam]*
+![DÃ©tection carrÃ©s](ReadmeResources/ARPong_Detection.gif)
 
-La webcam capte l'image et la transmet à un script utilisant EmguCV pour exraire, d'une part, le rouge de l'image et d'une autre le bleu.  
-Une fois ceci fait, le script cherche les carrés contenus dans ces images et utilise leurs positions dans la caméra pour déplacer les plaques des joueurs.
+La webcam capte l'image et la transmet Ã  un script utilisant EmguCV pour exraire, d'une part, le vert de l'image et d'une autre le bleu.
+AprÃ¨s avoir diffÃ©renciÃ© les couleurs, on dÃ©tecte leurs contours puis on en ressort la coordonnÃ©e centrale afin de dÃ©terminer la position Y du joueur.
 
-### Processus détaillé
+### Processus dÃ©taillÃ©
 
-- L'image capturée par la webcam est transmise au script
+- L'image capturÃ©e par la webcam est transmise au script [(voir image 1)](#Annexes)
 - Cette image est convertie en HSV
-- La conversion en HSV nous permet de récupérer plus facilement les éléments rouges et bleus de l'image [(voir images 1, 2 et 3)](#Annexes)
-- Les contours de ces images sont détectés grâce à un filtre de Canny
-- Pour chacun de ces contours on en récupère des polygones
-- On traite ensuite seulement les polygones à 4 côtés, d'après lesquels on construit des boîtes englobantes [(voir images 4 et 5)](#Annexes)
-- Les boîtes englobantes sont utilisées pour déplacer les plaques des joueurs par rapport à leur position dans l'écran
+- La conversion en HSV nous permet de rÃ©cupÃ©rer plus facilement les Ã©lÃ©ments verts et bleus de l'image [(voir images 2 et 3)](#Annexes)
+- On ferme les trous des formes et on supprimes les artÃ©facts extÃ©rieurs Ã  l'aide de 2 transformations morphologiques (close + open) [(voir images 4 et 5)](#Annexes)
+- Les contours de ces images sont dÃ©tectÃ©s grÃ¢ce Ã  un filtre de Canny [(voir images 6)](#Annexes)
+- On rÃ©cupÃ¨re le milieu de chaque contour et si l'aire de la forme est supÃ©rieure Ã  une certaine valeur, on utilise sa position Y pour dÃ©placer le joueur.
 
 ## Annexes
 
-![Webcam](ReadmeResources/webcam.png)  
 *Image 1 : capture de la webcam*
+![Webcam](ReadmeResources/webcam.png)  
 
-![Red](ReadmeResources/red.png)  
-*Image 2 : couleur rouge de la capture (voir Image 1)*
+*Images 2 & 3 : Isolation des couleurs sans transformation*
+| <p align="center">Green channel</p> | <p align="center">Blue channel</p> |
+| ------------- | ------------ |
+| <img src="ReadmeResources/green_before.png"/> | <img src="ReadmeResources/blue_before.png"/> |
 
-![Blue](ReadmeResources/blue.png)  
-*Image 3 : couleur bleue de la capture (voir Image 1)*
+*Images 4 & 5 : Isolation des couleurs aprÃ¨s fermeture*
+| <p align="center">Green channel</p> | <p align="center">Blue channel</p> |
+| ------------- | ------------ |
+| <img src="ReadmeResources/green.png"/> | <img src="ReadmeResources/blue.png"/> |
 
-![Sample](ReadmeResources/sample.png)  
-*Image 4 : image de test utilisée pour la reconnaissance de carrés colorés*
-
-![Square Detection](ReadmeResources/square_detection.png)  
-*Image 5 : détection de carrés rouges et bleus sur l'image de test (voir Image 4)*
+*Image 6 : Dessin des contours et milieux*
+<img src="ReadmeResources/contours.png"/>

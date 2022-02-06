@@ -12,42 +12,42 @@ The gameplay loop corresponds to Pong :
 
 ![Gameplay Loop](ReadmeResources/ARPong_GameplayLoop.gif)
 
-The ball spawns in the center of the field with a random direction along a 90� angle towards the player that lost the last point.  
+The ball spawns in the center of the field with a random direction along a 90° angle towards the player that lost the last point.  
 When reaching a player's goal, the ball reappears in the center of the field.  
-The first player uses the red square and the second uses the blue one.
+The first player uses the green square and the second uses the blue one.
 
 ## ARed Controls
 
-Controlling each players is achieved using colored squares, a red one and a blue one, moved in front of a webcam :
+Controlling each players is achieved using colored squares, a green one and a blue one, moved in front of a webcam :
 
-*[Placeholder : gif displaying the players controls using the webcam]*
+![Détection carrés](ReadmeResources/ARPong_Detection.gif)
 
-The webcam records the image and transfers it to a script using EmguCV to extract, firstly the red and lastly the blue from the image.  
+The webcam records the image and transfers it to a script using EmguCV to extract, firstly the green and lastly the blue from the image.  
 Once done, the script seeks the squares contained in each of these images and uses their screen positions to move each player.  
 
 ### Detailed Process
 
-- The recorded image is transferred to the script
+- The recorded image is transferred to the script [(voir image 1)](#Annexes)
 - This image is converted into HSV
-- This conversion into HSV enables us to retrieve more easily the red and blue colors from the image [(see images 1, 2 and 3)](#Annex)
-- The image's outlines are detected using a Canny filter
-- For each of these outlines we retrieve some polygons
-- We then only process the 4-sided polygons, using them to create bounding boxes [(see images 4 and 5)](#Annex)
-- The bounding boxes are used to move each player based on the boxes screen position
+- This conversion into HSV enables us to retrieve more easily the green and blue colors from the image [(voir images 2 et 3)](#Annex)
+- We close the shapes' holes and remove artifacts with closing and opening morphological transformations [(voir images 4 et 5)](#Annexes)
+- The image's outlines are detected using a Canny filter [(voir images 6)](#Annexes)
+- The center of each shape is detected and is used to set the player Y position if the shape area is big enough.
 
 ## Annex
 
+*Image 1 : image recorded by webcam*
 ![Webcam](ReadmeResources/webcam.png)  
-*Image 1 : webcam recorded image*
 
-![Red](ReadmeResources/red.png)  
-*Image 2 : red colors from the image (see Image 1)*
+*Images 2 & 3 : Isolating each color channels*
+| <p align="center">Green channel</p> | <p align="center">Blue channel</p> |
+| ------------- | ------------ |
+| <img src="ReadmeResources/green_before.png"/> | <img src="ReadmeResources/blue_before.png"/> |
 
-![Blue](ReadmeResources/blue.png)  
-*Image 3 : blue colors from the image (see Image 1)*
+*Images 4 & 5 : Applying morphological transformations to each channel*
+| <p align="center">Green channel</p> | <p align="center">Blue channel</p> |
+| ------------- | ------------ |
+| <img src="ReadmeResources/green.png"/> | <img src="ReadmeResources/blue.png"/> |
 
-![Sample](ReadmeResources/sample.png)  
-*Image 4 : test image used for colored squares detection*
-
-![Square Detection](ReadmeResources/square_detection.png)  
-*Image 5 : red and blue squares detection on the test image (see Image 4)*
+*Image 6 : Drawing contours and centers*
+<img src="ReadmeResources/contours.png"/>
